@@ -1,0 +1,2027 @@
+---
+title: "Pràctica Mineria de Dades"
+author: "Víctor Marmol"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PEC-header.html
+params:
+  seed: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# El factors que produeixen un **hit** musical.
+
+## Introducció
+
+La música ens rodeja i ara més que mai. Aquest fet és notable i les companyies privades ho saben, la música ha passat de ser un plaer personal a una de les industries més potents d'avui en dia. Però com podem convertir un gust musical personal en algun producte comercialitzable? Més enllà del merchandising, la solució que han trobat plataformes com Spotify és un sistema d'avaluació de cançons en que tota cançó es pot desglossar en paràmetres que es poden quantificar. A algunes persones els hi causa terror aquesta idea però podem arribar a conèixer molta informació musical amb aquests paràmetres numèrics i aquest projecte intenta extreure informació important d'aquestes dades que ens proporciona Spotify.
+
+## Primera part
+
+### Definició del problema
+
+La idea principal d'aquest projecte de mineria de dades és estudiar quins paràmetres fan que una cançó sigui popular, i predefinir quines característiques ha de complir una pista d'àudio per a ser popular o, com a mínim, no ser una cançó desconeguda. 
+
+També voldríem mirar si depenent del gènere podríem trobar agrupacions de paràmetres que prediguin si una cançó serà popular dintre d'aquest gènere o no.
+
+Pel camí, anirem explorant els paràmetres i intentarem arribar a conclusions tant del joc de dades com de conclusions que puguem anar traient d'aquest.
+
+### Descripció de l'origen del conjunt de dades
+
+L'origen del conjunt de dades ha estat la pàgina recomanada www.kaggle.com.
+
+En particular, utilitzarem aquest joc de dades de la plataforma Spotify sota una Open Database License (ODbL)\footnote{https://opendatacommons.org/licenses/odbl/1-0/}:
+
+https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset
+
+Hem triat aquest joc de dades perquè complia amb els criteris mínims del joc de dades de la pràctica, estava prou net i no tenia un excés de valors buits o nuls, ens servia pel nostre objectiu i era interessant saber si, objectivament parlant, quanta part de la música és qüestió de gustos i quanta part és estudi de la industria musical.
+
+### Trobar el conjunt de dades
+
+Cal descarregar el fitxer **.zip** i crear un directori: **Dades/spotify/** dins de la carpeta on es troba el projecte. Una vegada al directori spotify de la carpeta Dades enganxar el **.csv** dataset.
+
+Una vegada llest ja podem carregar les dades d'aquesta pràctica:
+
+```{r}
+pathSpotify <- "Dades/spotify/dataset.csv"
+Spotify <- read.csv(pathSpotify, row.names = NULL)
+set.seed(3)
+```
+
+### Anàlisi Exploratòria
+
+Primer li farem un cop d'ull a l'estructura de les dades:
+
+```{r}
+str(Spotify)
+```
+Observem que és un data frame de 114.000 observacions amb 21 variables.
+Cal destacar que tenim 15 columnes numèriques, 5 de caràcters i una binària.
+
+Veiem què és cadascuna d'elles:
+
+  * *track_id*: la identificació que utilitza Spotify per a la cançó.
+  * *artist*: el nom dels artistes que col·laboren en la cançó.
+  * *album_name*: nom de l'àlbum en el que es troba la cançó.
+  * *track_name*: nom de la cançó.
+  * *popularity*: popularitat. És un valor entre l'1 i el 100 calculat per la xarxa neuronal d'Spotify. Els càlculs no els sabem concretament però és el número que utilitza el programa per a recomanar certs artistes i/o cançons.
+  * *duration_ms*: duració en milisegons.
+  * *explicit*: si la cançó té lletra explícita o no.
+  * *danceability*: paràmetre que calcula Spotify per a considerar si una cançó es pot ballar o no. Siguent 1 que es pot i 0 que no.
+  * *energy*: és una mesura del 0 a l'1 que representa la intensitat i la activitat de la cançó.
+  * *key*: indica en quina clau està la cançó.
+  * *loudness*: la mesura del volum en decibels (dB).
+  * *mode*: indica en quina modalitat es troba la cançó (major o menor).
+  * *speechiness*: Indica la presència de paraules parlades en una pista. Els valors més propers a l'1 tenen menys melodia i més discurs. Es considera que per sobre de 0.66 aquest paràmetre descriu pistes que són exclusivament paraules parlades com podcasts o àudiollibres, entre 0.66 i 0.33 tenim pistes que tenen música i discursos i, per últim, les pistes per sota de 0.33 representaran música i pistes on no es senti gent parlar.
+  * *acousticness*: un paràmetre per a dir si la cançó és acústica o no, 1 representa que és amb alta probabilitat acústica.
+  * *instrumentalness*: prediu si una cançó conté veu o no. Si aquest paràmetre s'apropa a 1 tindrem menys veus. Per exemple el rap tindrà l'**instrumentalness** baix i la música instrumental el tindrà alt.
+  * *liveness*: Detecta la presència de l'audiència a l'àudio. Quant més alt més probable que ens trobem amb una gravació d'un directe.
+  * *valence*: Detecta la positivitat d'una pista. Quant més proper a l'1 l'àudio sonarà més alegre o positiu i quant més baix més trist o enfadat.
+  * *tempo*: El tempo de la cançó en batecs per minut (BPM).
+  * *time_signature*: és una estimació de les pulsacions per cada compàs. Varia de 3 a 7 i indica si és 3/4 fins a 7/4.
+  * *track_genre*: és el gènere al qual pertany la pista d'àudio.
+  
+
+
+El primer pas, com sempre, és netejar les nostres dades per a poder començar a treballar amb elles.
+Tot i que les haguem obtingut de kaggle.com i sembli que estan llestes per a treballar, sempre és important comprovar-ho.
+
+Veiem si hi ha valors nuls:
+
+```{r}
+if(sum(colSums(is.na(Spotify)))==0){
+  print("No hi ha valors nuls")
+} else {
+  print("Si hi ha valors nuls")
+}
+```
+Sembla que no hi ha valors nuls.
+Veiem els valors en blanc:
+
+```{r}
+if(sum(colSums(Spotify==""))==0){
+  print("No hi ha valors en blanc")
+} else {
+  print("Si hi ha valors en blanc")
+}
+```
+Per tant, si que tenim valors en blanc, anem a especificar on es troben:
+
+```{r}
+names(which(colSums(Spotify=="")!=0))
+      
+sum(Spotify$artists=="")
+sum(Spotify$album_name=="")
+sum(Spotify$track_name=="")
+```
+
+Veiem que només tenim un error a cada camp, mirem si coincideixen i si és així quin cas és:
+
+```{r}
+which(Spotify$artists=="")
+which(Spotify$album_name=="")
+which(Spotify$track_name=="")
+
+Spotify[65901,]
+```
+Observem que no tenim artista, ni nom de l'àlbum, ni nom de la pista però, abans d'eliminar aquest registre hem de considerar si podem recuperar la informació amb el **track_id**.
+
+De manera que hem de cercar: https://open.spotify.com/track/1kR4gIb7nGxHPI3D2ifs59. I veiem que la cançó no es pot reproduir i que el millor que podem fer és eliminar el registre per no tenir dades esbiaixades.
+
+```{r}
+Spotify <- Spotify[-65901,]
+```
+
+Fem la comprovació de que no tenim registres en blanc:
+
+```{r}
+if(sum(colSums(Spotify==""))==0){
+  print("No hi ha valors en blanc")
+} else {
+  print("Si hi ha valors en blanc")
+}
+```
+És hora de crear histogrames i altres representacions gràfiques de les dades per a veure amb què estem treballant:
+
+```{r message=FALSE, warning=FALSE}
+if(!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+if(!require('Rmisc')) install.packages('Rmisc'); library('Rmisc')
+if(!require('dplyr')) install.packages('dplyr'); library('dplyr')
+if(!require('xfun')) install.packages('xfun'); library('xfun')
+if(!require('gridExtra')) install.packages('gridExtra'); library('gridExtra')
+```
+
+Començarem amb la popularitat de les pistes d'àudio:
+
+```{r}
+summary(Spotify$popularity)
+
+histpop <- ggplot(Spotify, aes(x = !!rlang::sym("popularity")))+
+  geom_histogram(bins=100, fill = "red", color="black")
+histpop
+```
+
+Les cançons amb molt poca popularitat són moltes i gairebé la majoria tenen una popularitat nul·la. Això ens pot portar problemes, donat que no ens trobem davant d'unes dades normals o logarítmiques.
+
+Veiem la resta de paràmetres. Comencem amb els numèrics:
+
+```{r}
+paràmetres <- c(
+  "duration_ms",
+  "danceability",
+  "energy",
+  "loudness",
+  "speechiness",
+  "acousticness",
+  "instrumentalness",
+  "liveness",
+  "valence",
+  "tempo"
+)
+
+histograma <- function(variable) {
+  ggplot(Spotify, aes(x = !!rlang::sym(variable))) +
+    geom_histogram(bins = 30, fill = "red", color = "black") +
+    labs(title = variable) +
+    theme_minimal()
+}
+summarylapply <- function(variable){
+  cat("summary de",variable,":\n")
+  print(summary(Spotify[[variable]]))
+}
+
+histogrames <- lapply(paràmetres, histograma)
+summaries <- lapply(paràmetres, summarylapply)
+
+summaries[1]
+grid.arrange(grobs = histogrames, nrow = 3)
+```
+Observem que pel que fa a la dançabilitat, l'energia, el volum, el paràmetre liveness, la valència i el tempo no són distribucions normals però no dona la sensació de que ens donaran problemes a l'hora de tenir molta correlació. D'altra banda, si que podríem tenir aquest problema amb la durada, l'speechiness, l'acousticness i l'instrumentalness. Mirarem si hi ha alguna manera d'evitar aquest problema.
+
+Per exemple amb la durada, podem veure a l'histograma que la variable sembla que tingui una distribució log-normal i, per tant, li farem el logaritme i la normalitzarem:
+
+```{r}
+Spotify$durationscale <- as.vector(scale(log(Spotify$duration_ms)))
+
+histograma("durationscale")
+```
+Amb les altres tres si que sembla que tenim més problema donat que no podem deduir una distribució a simple vista. Avançarem amb la pràctica i actuarem si sorgeix algun problema.
+
+Considerem ara les variables que no són numèriques. Els noms dels artistes, la identificació de la pista, el nom de l'àudio o de l'àlbum a un nivell de mineria de dades només ens interessa per a explicar els resultats, no per a una anàlisi tècnica i els deixarem de banda de moment. La resta de variables si que ens interessen:
+
+```{r}
+explicittaula <- table(Spotify$explicit)
+explicittaula
+prop.table(explicittaula)
+barplot(prop.table(explicittaula),col = c("green","red"), names.arg = c("No explicit","Explicit"))
+```
+Com podem veure la majoria de les lletres no són explícites. Veiem com afecta aquesta característica a la popularitat.
+
+El primer que farem serà discretitzar la popularitat en intervals de 10:
+
+```{r}
+Spotify$popularity10 <- cut(Spotify$popularity, breaks = seq(0,100,by = 10))
+
+Spotify$popularity4 <- cut(Spotify$popularity, breaks = seq(0,100,by = 25))
+
+Spotify$popularity4[Spotify$popularity == 0] <- "(0,25]"
+
+levels(Spotify$popularity4) <- c("[0,25]", "(25,50]", "(50,75]", "(75,100]")
+```
+
+Ara calcularem les proporcions, però no amb **prop.table** volem veure la proporció respecte al número de cançons que tenim.
+Així, podem comparar si és millor crear una cançó amb lletres explícites o no:
+
+```{r}
+counts <- table(Spotify$explicit, Spotify$popularity10)
+propfals <- counts[1,]/explicittaula[1]
+proptrue <- counts[2,]/explicittaula[2]
+propexpl <- data.frame(propfals,proptrue)
+row.names(propexpl) <- c("(0,10]", "(10,20]", "(20,30]", "(30,40]", "(40,50]", "(50,60]", "(60,70]", "(70,80]", "(80,90]", "(90,100]")
+
+#prop.table(counts)
+barplot(t(propexpl), beside = TRUE, col=c("red","green"), las=2)
+```
+Observem que aquest resultat és molt evident. Les cançons amb lletres explícites no tenen tanta popularitat com la resta, això pot ser degut a que és més difícil que surtin en medis de comunicació populars o en anuncis.
+
+Ara bé, no caiguem en conclusions precipitades, caldria mirar si sobre algun tipus de població aquestes cançons amb lletres explícites són més populars. No estaria malament estudiar sobre quina franja d'edat aquestes cançons tenen més èxit, en quines regions són més populars (Al Canadà és complicat escoltar reggaeton que és un gènere que utilitza un llenguatge explícit i a Espanya és molt habitual) o inclús si el nivell adquisitiu pot tenir res a veure.
+
+Per continuar, estudiarem tres paràmetres relacionats amb la melodia i el ritme. Últimament no és estrany escoltar que "tota la música d'avui en dia sona igual" o que "ja tot està inventat". 
+
+Anem a veure si aquestes apreciacions són fruit de la falta de comprensió o si realment podem demostrar amb dades que aquestes queixes són fonamentades.
+
+Primer estudiem la clau:
+
+```{r}
+barplot(table(Spotify$key), col=c("green",
+                                   rep("skyblue",2),
+                                   "red",
+                                   rep("skyblue",3),
+                                   "green",
+                                   rep("skyblue",4)))
+```
+
+Clarament hi ha dues claus preferides i una que no agrada gens. Les dues preferides són Do i Sol i la que no tenim és el Re sostingut. Tot i que hauríem de consultar a algun expert amb més idea musical que l'autor d'aquesta pràctica, les escales de Do i de Sol són les primeres en ensenyar-se al conservatori, en particular les majors, i a on la majoria de gent està més còmode. D'altra banda, l'escala de Re Sostingut si que té moltes notes que són sostinguts o bemolls i no és tan natural d'escoltar.
+
+Veiem el mode de les cançons:
+
+```{r}
+barplot(table(Spotify$mode), col = c("purple","orange"), names.arg = c("Menor","Major"))
+```
+
+Ara que tenim la clau i la tonalitat. Veiem quines són les escales més utilitzades:
+
+```{r}
+table(Spotify$mode, Spotify$key)
+prop.table(table(Spotify$mode, Spotify$key))
+barplot(table(Spotify$mode, Spotify$key),beside=TRUE, col = c("purple","orange"))
+```
+Per tant, corroborem que les escales més utilitzades són Do major i Sol major. La menys utilitzada és Re sostingut menor i l'escala menor més utilitzada és Si menor.
+
+Podem afirmar que les escales de Do Major i Sol Major s'utilitzen gairebé amb la mateixa proporció i que gairebé una de cada cinc cançons (approx. 18%) que trobem en aquesta llista estan en aquestes dues escales.
+
+Caldria consultar a un expert musical si volguéssim més concreció i un discurs més tècnic però si que sembla un percentatge molt gran i ens permet comprendre una mica aquesta protesta de que "avui en dia tot sona igual".
+
+Potser trobem més heterogeneïtat en el ritme que no pas en la melodia, mirem-ho:
+
+```{r}
+prop.table(table(Spotify$time_signature))
+barplot(table(Spotify$time_signature),col=c(rep("lightseagreen",3),"green","lightseagreen"))
+```
+
+Més del 89% de les cançons estan en 4/4. Per tant, no tenim més heterogeneïtat que amb la melodia.
+
+Aquestes dades tan extremes fan pensar que aquesta llista potser està esbiaixada i que té més cançons d'algun gènere en concret que no pas d'altres. 
+
+Estudiarem ara aquest últim paràmetre:
+
+```{r}
+#table(Spotify$track_genre)
+head(table(Spotify$track_genre))
+```
+Ens trobem amb que tenim 1000 cançons per gènere. Aquest fet deu ser degut per la construcció del joc de dades.
+
+Ja sabem que la majoria de cançons estan en 4/4, però quins generes són els que utilitzen la resta de compassos? És el 4/4 un ritme d'occident i tenim un esbiaixament de les dades perquè les cançons estan occidentalitzades? Veiem-ho!
+
+```{r}
+Spotify04 <- subset(Spotify, Spotify$time_signature == 0)
+table(Spotify04$track_genre)
+```
+
+És interessant comprovar que la majoria de cançons en 6/4 són del gènere per a dormir.
+
+D'altra banda el compàs 7/4:
+
+```{r}
+Spotify14 <- subset(Spotify, Spotify$time_signature == 1)
+head(sort(table(Spotify14$track_genre), decreasing = TRUE),10)
+```
+Tornem a obtenir música per a dormir però és interessant veure com la música clàssica, el folk, la iraniana i l'òpera surten significativament. Aquest fet és important i reforça la hipòtesi de que el 4/4 és un ritme modern i occidental. Comprovem aquest fet amb el 3/4:
+
+```{r}
+Spotify34 <- subset(Spotify, Spotify$time_signature == 3)
+head(sort(table(Spotify34$track_genre), decreasing = TRUE),10)
+```
+Tornem a verificar la hipòtesi donat que tornem a trobar música iraniana, òpera, clàssica i de piano.
+
+```{r}
+Spotify54 <- subset(Spotify, Spotify$time_signature == 5)
+head(sort(table(Spotify54$track_genre), decreasing = TRUE),10)
+```
+I, definitivament podem parlar d'una llista prou occidentalitzada. El fet que en aquest compàs ens surti dancehall i funk que son ritmes no occidentals corroboren la hipòtesi amb que treballàvem.
+
+Estudiem les correlacions:
+
+```{r}
+if(!require("dplyr")) install.packages("dplyr"); library("dplyr")
+if(!require("corrplot")) install.packages("corrplot"); library("corrplot")
+```
+
+
+```{r}
+n <- c(
+  "popularity",
+  "durationscale",
+  "danceability",
+  "energy",
+  "loudness",
+  "speechiness",
+  "acousticness",
+  "instrumentalness",
+  "liveness",
+  "valence",
+  "tempo"
+)
+
+factors <- Spotify %>% select(all_of(n))
+
+res <- cor(factors)
+
+corrplot(res, method="color", tl.col="black", tl.srt=30, order = "AOE",
+number.cex=0.75, sig.level = 0.01, addCoef.col = "black")
+```
+
+Aquesta matriu de correlacions és molt interessant.
+
+Observem que el que més destaca és la correlació negativa entre l'energia i si una cançó és acústica o no. És obvi que un humà ho pot percebre però que els procediments d'Spotify ho detectin ens assegura que aquestes variables estan ben buscades.
+
+En general ens ha de preocupar la correlació negativa entre l'energia i si una cançó és acústica o no, el soroll i si una cançó és acústica o no i la correlació positiva entre l'energia i lo sorollosa que és una cançó.
+La resta són correlacions prou baixes que no ens haurien de donar cap problema.
+
+Donat que la nostra intenció és dur a terme un procés de PCA o SVD, deixarem les variables amb correlació alta, tenint en compte que podem corregir aquesta decisió si els resultats posteriors ho demanen.
+
+### SVD
+
+El següent pas és reduir la dimensionalitat i ho farem amb SVD. És cert que el cost computacional d'aquest mètode és pitjor que el de PCA però hem d'entendre que les nostres dades no són normals, no estan escalades i tenim una gran presència d'outliers en alguns casos. Per tant, la SVD és millor en el nostre cas.
+
+Primer hem de trobar la descomposició i R té la instrucció **svd()**:
+
+```{r}
+SVD <- svd(res)
+
+round(SVD$d,1)
+round(SVD$u,1)
+#round(SVD$v,1)
+
+round(SVD$u,1)-round(SVD$v,1)
+```
+Ens hem quedat amb les tres matrius: la diagonal (d) amb els valors propis i les matrius de vectors esquerra i dreta (u,v) que ens expliquen el pes i la importància en la variació del resultat de les variables. Cal fixar-se en que com que la matriu és simètrica u i v són iguals.
+
+Voldríem reduir la dimensionalitat. Pel criteri de Guttman-Kaiser podem triar els valors que siguin més grans que 1. De manera que ens quedarien els següents valors:
+
+```{r}
+subset(round(SVD$d,1),round(SVD$d,1)>1)
+```
+De tota manera també aplicarem el test de Cattell que consisteix a representar gràficament els valors singulars:
+
+```{r}
+plot(SVD$d, type = "b")
+```
+El que busquem amb aquest gràfic és una caiguda brusca dels valors però en aquest cas la tindríem en 2 valors.
+
+Triarem llavors 3 donat que obtindrem més informació, tot i que, com sempre, cal recordar aquesta decisió i si, en un futur, se'ns presenten problemes hem de tenir en compte la decisió que acabem de prendre.
+
+Per tant,
+
+```{r}
+ValorsReduits <- diag(c(subset(SVD$d,round(SVD$d,1)>1),rep(0,8)))
+#ValorsReduits
+SVDred <- SVD$u%*%ValorsReduits%*%t(SVD$v)
+SVDred
+```
+És molt destacable que aquesta matriu, per exemple, a l'últim terme de la diagonal té un valor massa proper al zero. Dona que pensar que potser hem reduït massa les dimensions. Comprovem-ho amb la norma de Frobenius per a matrius:
+
+```{r}
+frobnorm <- sqrt(sum((res-SVDred)^2))
+frobnorm
+```
+Dista prou de 0, tornarem enrere i utilitzarem un altre criteri de selecció de valors.
+Aquest mètode consisteix a prendre suficients valors singulars com per a que la suma dels quadrats d'aquests s'aproximi al 90% de la suma dels quadrats de tots els valors singulars. En el nostre cas, veiem que:
+
+```{r}
+valors90 <- 0.9*sum(round(SVD$d,1)^2)
+valors90
+
+valorsnous <- subset(round(SVD$d,1),round(SVD$d,1)>0.8)
+sum(valorsnous^2)
+
+valors90 - sum(valorsnous^2)
+```
+Només per entendre la diferència amb els anteriors valors triats:
+
+```{r}
+valors90-sum(subset(round(SVD$d,1),round(SVD$d,1)>1)^2)
+```
+El valor és prou més alt.
+
+Tornem a dur a terme la reducció de la dimensionalitat:
+
+```{r}
+ValorsReduits <- diag(c(subset(SVD$d,round(SVD$d,1)>0.8),rep(0,5)))
+
+SVDred <- SVD$u%*%ValorsReduits%*%t(SVD$v)
+SVDred
+```
+Observem que el valor que abans ens havia fet dubtar ara dista més del zero. Considerarem que aquesta reducció és valida i buscarem quines són les variables que afecten més a la popularitat de les cançons. 
+
+Recordem que el primer paràmetre de la matriu de correlacions és el de la popularitat, per tant cal multiplicar el vector unitari (1,0,0,0,0,0,0,0,0,0) per la matriu desprès de la reducció de paràmetres:
+
+```{r}
+Pop <- c(1,0,0,0,0,0,0,0,0,0,0)
+
+InfluenciaPop <- round(Pop%*%SVDred,1)
+InfluenciaPop
+names(InfluenciaPop) <- n
+
+```
+Ara si, ja podem veure quines variables influeixen més a la popularitat d'una cançó. 
+
+A primera vista els següents paràmetres no influeixen en la popularitat:
+
+```{r}
+InfluenciaPop[3]
+InfluenciaPop[4]
+InfluenciaPop[6]
+InfluenciaPop[7]
+InfluenciaPop[11]
+```
+És a dir, per exemple, tenim cançons amb molta energia que són molt populars i en tenim que no ho son tant i viceversa. Això passa amb els 5 paràmetres.
+
+De primeres xoca el fet de que la dançabilitat no influeixi en la popularitat d'una cançó. Es podria pensar que si una cançó és més ballable com que és que soni en una discoteca podria fer que més gent la conegui però no sembla el cas.
+
+És interessant veure que l'energia, el tempo i si és acustic o no no influeixen tampoc. Això vol dir que tots els gèneres musicals poden tenir *hits* populars. Si, per exemple, tinguéssim que el tempo lent influeix positivament en la popularitat podríem suposar que les balades podrien ser un gènere més popular que algun altre. De totes maneres això necessitaria d'estudis més concrets discriminant per gènere musical si ho volguéssim veure amb detall.
+
+Per últim, comentar que la influència de la discursivitat sigui 0 no sembla estrany. Que hi hagi paraules parlades o no no influeix en la popularitat d'una cançó.
+
+```{r}
+InfluenciaPop[2]
+InfluenciaPop[5]
+```
+No sorprèn que el volum d'una cançó influeixi en la popularitat d'una cançó. De fet, al voltant dels 90, va començar una tendència per pujar el volum de les cançons any darrere any per part de la industria musical fins el punt d'afectar en la qualitat de l'àudio. Aquesta pujada progressiva del volum era per que les cançons del nou any destaquessin per sobre de l'anterior. Aquest fenomen anomenat guerra del volum o **loudness war** en anglès està documentada i es pot consultar en el següent article: https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=e6fc74f9637ee13f352188fd1286f1c0bdad2d80 i en el vídeo: https://www.youtube.com/watch?v=lTGw8PkB3ug&ab_channel=FacundoGonz%C3%A1lez. 
+
+D'altra banda si que destaca que la durada d'una cançó afecti positivament la seva popularitat donat que la tendència del mercat és que les cançons són cada vegada més curtes. També és cert que les cançons antigues han sonat més, són més llargues i les que sobreviuen son totes populars per l'esbiaixament de la supervivència. Per tant, estaria molt bé fer un estudi particular de la llista de cançons que estem treballant i l'any en que van sortir a la llum per poder parlar amb més propietat.
+
+Anem amb els factors que influeixen negativament a la popularitat:
+
+```{r}
+InfluenciaPop[9]
+InfluenciaPop[10]
+```
+No sembla estrany que si una cançó està en viu tingui una qualitat d'àudio més dolenta que no pas una cançó gravada en estudi. Per tant, és normal que afecti a la seva popularitat.
+
+D'altra banda, una de les sorpreses és la valència. Un pot pensar que si una cançó és més positiva tindrà més èxit i serà més popular però no sembla el cas. Tot i així, estaria bé aprofundir en aquest tema i veure si el problema és que la majoria de cançons són positives i alegres i, per tant, n'hi ha més de menys populars, si com que una cançó és més trista impacta més o si, realment, les cançons amb més valència són menys populars. Altra vegada, necessitem treballar més les dades en aquest aspecte.
+
+Acabarem amb la característica que més afecta negativament a la popularitat d'una cançó:
+
+```{r}
+InfluenciaPop[8]
+```
+Sembla que una cançó molt instrumental no és tant popular. Això pot ser degut a que no té lletres memorables que facin recordar-la, comentar-la amb els amics o, simplement, buscar-la.
+
+### Selecció del joc de dades.
+
+En el nostre cas, prendrem les dades que només afecten a la popularitat i, per tant, eliminarem les variables **danceability**, **energy**, **speechiness**, **acousticness** i **tempo**.
+
+Tot i que, no descartem que, depenent de com avanci la segona part d'aquesta pràctica, haguem de rescatar alguna d'aquestes variables per estudis posteriors.
+
+El joc, per ara, quedarà així:
+
+```{r}
+Spotifynew <- Spotify[,c(2,6,8,11,12,13,16,17,18,20,21,22,24)]
+Spotifynew$track_genre <- as.factor(Spotifynew$track_genre)
+Spotifynew$explicit <- as.factor(Spotifynew$explicit)
+Spotifynew <- unique(Spotifynew)
+head(Spotifynew,6)
+```
+
+## Segona part
+
+### Popularitat per gènere
+
+Aplicarem diferents models de clustering per a classificar per grups els diferents paràmetres i veurem si el gènere musical afecta en aquestes agrupacions.
+
+### Model de k-means
+
+El primer model que triarem és el de k-means.
+
+#### Elecció de nodes
+
+Però primer hem de saber quants nodes ha de tenir el nostre model. Començarem traient les columnes que no ens interessen com són l'identificador del track, les variables que convertirem en factors i la popularitat per a que no ens distorsioni els nodes:
+
+```{r}
+MeansSpotify <- Spotifynew[,-c(1,2,3,4,6,10,11,13)]
+```
+
+I aplicarem el criteri de la silueta per veure quin és el número òptim de clusters:
+
+```{r warning=FALSE}
+j <- 10
+
+res <- rep(0,j-1)
+clusters <- 2:j
+
+
+for (i in clusters) {
+  fit <- kmeans(MeansSpotify,i)
+  res[i] <- fit$tot.withinss
+}
+
+plot(2:j, res[2:j], type = "o", xlab = "Número de nodes", ylab="")
+```
+Veiem que el "colze" més brusc es dona en 5 nodes. Tot i així, anem a aplicar la funció kmeansruns del paquet **fpc** per confirmar que 4 és un bon nombre de nodes:
+
+```{r message=FALSE, warning=FALSE}
+if (!require('fpc')) install.packages('fpc'); library('fpc')
+```
+
+```{r warning=FALSE}
+j <- 10
+
+fit_ch <- kmeansruns(MeansSpotify, krange = 1:j, criterion = "ch")
+fit_ch$bestk
+```
+Com podem comprovar, el temps de computació és molt elevat pel criteri de Calinski-Harabasz i, com que la quantitat de dades és molt elevada, també ho és pel criteri de la silueta mitja.
+
+```{r}
+#fit_asw <- kmeansruns(MeansSpotify, krange = 1:j, criterion = "asw")
+#fit_asw$bestk
+```
+
+No l'executarem donat que el criteri de Calinski-Harabasz coincideix amb els cinc nodes del criteri de la silueta i, a més, hauríem de prendre subconjunts de les nostres dades inicials.
+
+#### Representació gràfica
+
+De manera que ja sabem que hem d'aplicar kmeans amb 5 nodes. Veiem la representació gràfica d'aquests nodes i comparem-lo amb la popularitat:
+
+```{r plot}
+Spotify5nod <- kmeans(MeansSpotify,5)
+
+par(mfrow=c(4,2), plt = c(0.3,1,0.1,0.75))
+
+plot(MeansSpotify[c(1,2)], col=Spotify5nod$cluster, main= "",xlab="soroll", ylab="instrumentalitat")
+plot(Spotifynew[c(5,7)], col=Spotifynew$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+
+plot(MeansSpotify[c(1,3)], col=Spotify5nod$cluster, main= "",xlab="soroll", ylab="en viu")
+plot(Spotifynew[c(5,8)], col=Spotifynew$popularity4, main= "",xlab="soroll", ylab="en viu")
+
+plot(MeansSpotify[c(1,4)], col=Spotify5nod$cluster, main= "",xlab="soroll", ylab="positivitat")
+plot(Spotifynew[c(5,9)], col=Spotifynew$popularity4, main= "",xlab="soroll", ylab="positivitat")
+
+plot(MeansSpotify[c(1,5)], col=Spotify5nod$cluster, main= "",xlab="soroll", ylab="durada")
+plot(Spotifynew[c(5,12)], col=Spotifynew$popularity4, main= "",xlab="soroll", ylab="durada")
+```
+
+```{r}
+par(mfrow=c(3,2), plt = c(0.3,1,0.1,0.75))
+
+plot(MeansSpotify[c(2,3)], col=Spotify5nod$cluster, main= "",xlab="instrumentalitat", ylab="en viu")
+plot(Spotifynew[c(7,8)], col=Spotifynew$popularity4, main= "",xlab="instrumentalitat", ylab="en viu")
+
+plot(MeansSpotify[c(2,4)], col=Spotify5nod$cluster, main= "",xlab="instrumentalitat", ylab="positivitat")
+plot(Spotifynew[c(7,9)], col=Spotifynew$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+
+plot(MeansSpotify[c(2,5)], col=Spotify5nod$cluster, main= "",xlab="instrumentalitat", ylab="durada")
+plot(Spotifynew[c(7,12)], col=Spotifynew$popularity4, main= "",xlab="instrumentalitat", ylab="durada")
+```
+```{r}
+par(mfrow=c(2,2), plt = c(0.3,1,0.1,0.75))
+
+plot(MeansSpotify[c(3,4)], col=Spotify5nod$cluster, main= "",xlab="en viu", ylab="positivitat")
+plot(Spotifynew[c(8,9)], col=Spotifynew$popularity4, main= "",xlab="en viu", ylab="positivitat")
+
+plot(MeansSpotify[c(3,5)], col=Spotify5nod$cluster, main= "",xlab="en viu", ylab="durada")
+plot(Spotifynew[c(8,12)], col=Spotifynew$popularity4, main= "",xlab="en viu", ylab="durada")
+```
+```{r}
+par(mfrow=c(2,2), plt = c(0.3,1,0.1,0.75))
+
+plot(MeansSpotify[c(4,5)], col=Spotify5nod$cluster, main= "",xlab="positivitat", ylab="durada")
+plot(Spotifynew[c(9,12)], col=Spotifynew$popularity4, main= "",xlab="positivitat", ylab="durada")
+```
+
+A primera vista, sembla que no hi ha cap paràmetre que pugui predir la popularitat d'una cançó en general.
+A més, la gran quantitat de dades que tenim fa que la lectura dels gràfics sigui molt complicada.
+
+De totes maneres, pensem que la música és molt diferent i que potser el que si que podem trobar són paràmetres que fan que una cançó dins d'un gènere sigui popular.
+
+Ara la pregunta que tenim és: Quin gènere hem de triar per aquest estudi?
+
+### Selecció de gènere
+
+La idea és prendre un gènere que tingui una bona proporció de cançons populars i una bona proporció de cançons no populars:
+
+```{r}
+proppop <- round(
+  prop.table(
+    table(Spotify$track_genre,Spotify$popularity4),
+    margin = 1),
+  digits = 2)
+
+head(proppop[order(proppop[,"(75,100]"],decreasing=TRUE),])
+```
+Triarem el dance, donat que és el primer de la llista. És cert que no té representació en el tram (25,50] però no hauria de suposar cap problema.
+
+Ara crearem una mostra d'entre les cançons dance i obtenim el següent subconjunt de dades:
+
+```{r}
+library(dplyr)
+
+Dance <- subset(Spotifynew, track_genre=="dance")
+
+Dance1 <- Dance %>%
+  filter(popularity4=="(75,100]") %>%
+  sample_n(100,replace = FALSE)
+
+Dance2 <- Dance %>%
+  filter(popularity4=="(50,75]") %>%
+  sample_n(100,replace = FALSE)
+
+Dance3 <- Dance %>%
+  filter(popularity4=="(25,50]") %>%
+  sample_n(2,replace = FALSE)
+
+Dance4 <- Dance %>%
+  filter(popularity4=="[0,25]") %>%
+  sample_n(100,replace = FALSE)
+
+Dance <- bind_rows(Dance1,Dance2,Dance3,Dance4)
+MeansDance <- Dance[,-c(1,2,3,4,6,10,11,13)]
+```
+
+Veiem si té sentit buscar nodes que separin les dades:
+
+```{r}
+par(mfrow=c(5,2), plt = c(0.3,1,0.1,0.75))
+
+plot(Dance[c(5,7)], col=Dance$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+
+plot(Dance[c(5,8)], col=Dance$popularity4, main= "",xlab="soroll", ylab="en viu")
+
+plot(Dance[c(5,9)], col=Dance$popularity4, main= "",xlab="soroll", ylab="positivitat")
+
+plot(Dance[c(5,12)], col=Dance$popularity4, main= "",xlab="soroll", ylab="durada")
+
+plot(Dance[c(7,8)], col=Dance$popularity4, main= "",xlab="instrumentalitat", ylab="en viu")
+
+plot(Dance[c(7,9)], col=Dance$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+
+plot(Dance[c(7,12)], col=Dance$popularity4, main= "",xlab="instrumentalitat", ylab="durada")
+
+plot(Dance[c(8,9)], col=Dance$popularity4, main= "",xlab="en viu", ylab="positivitat")
+
+plot(Dance[c(8,12)], col=Dance$popularity4, main= "",xlab="en viu", ylab="durada")
+
+plot(Dance[c(9,12)], col=Dance$popularity4, main= "",xlab="positivitat", ylab="durada")
+```
+
+No té cap sentit perquè els paràmetres de les cançons estan massa entrellaçats. Però si que és interessant veure com les cançons no són instrumentals.
+
+De tota manera, no és el que buscàvem. El que farem és trobar un gènere amb regles més estrictes, donat que el Dance té massa variabilitat.
+I el gènere més formal és la música clàssica:
+
+```{r}
+Classic <- subset(Spotifynew, track_genre=="classical")
+
+Classic2 <- Classic %>%
+  filter(popularity4=="(50,75]") %>%
+  sample_n(55,replace = FALSE)
+
+Classic3 <- Classic %>%
+  filter(popularity4=="(25,50]") %>%
+  sample_n(100,replace = FALSE)
+
+Classic4 <- Classic %>%
+  filter(popularity4=="[0,25]") %>%
+  sample_n(100,replace = FALSE)
+
+Classic <- bind_rows(Classic2,Classic3,Classic4)
+MeansClassic <- Classic[,-c(1,2,3,4,6,10,11,13)]
+```
+
+Veiem si podem aplicar-li un k-means:
+
+```{r}
+par(mfrow=c(5,2), plt = c(0.3,1,0.1,0.75))
+
+plot(Classic[c(5,7)], col=Classic$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+
+plot(Classic[c(5,8)], col=Classic$popularity4, main= "",xlab="soroll", ylab="en viu")
+
+plot(Classic[c(5,9)], col=Classic$popularity4, main= "",xlab="soroll", ylab="positivitat")
+
+plot(Classic[c(5,12)], col=Classic$popularity4, main= "",xlab="soroll", ylab="durada")
+
+plot(Classic[c(7,8)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="en viu")
+
+plot(Classic[c(7,9)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+
+plot(Classic[c(7,12)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="durada")
+
+plot(Classic[c(8,9)], col=Classic$popularity4, main= "",xlab="en viu", ylab="positivitat")
+
+plot(Classic[c(8,12)], col=Classic$popularity4, main= "",xlab="en viu", ylab="durada")
+
+plot(Classic[c(9,12)], col=Classic$popularity4, main= "",xlab="positivitat", ylab="durada")
+```
+
+Observem que aquí si que obtenim gràfics susceptibles per a aplicar-li k-means. Exemples d'aquests són instrumentalitat i soroll, positivitat i soroll, durada i soroll, positivitat i instrumentalitat i durada i positivitat.
+Aquests seran els gràfics que mirarem i les variables implicades les que utilitzarem per aplicar k-means:
+
+### K-means a la música clàssica
+
+```{r}
+MeansClassic <- MeansClassic[,-3]
+names(MeansClassic)
+```
+#### Elecció de nodes
+
+Comencem per l'elecció de nodes.
+
+Com abans, primer veurem el criteri de la silueta:
+
+```{r}
+j <- 30
+
+res <- rep(0,j-1)
+clusters <- 2:j
+
+
+for (i in clusters) {
+  fit <- kmeans(MeansClassic,i)
+  res[i] <- fit$tot.withinss
+}
+
+plot(2:j, res[2:j], type = "o", xlab = "Número de nodes", ylab="")
+```
+Sembla que 2 o 3 és el número de nodes més correcte segons aquest criteri.
+
+Seguim amb la funció kmeansruns i els dos criteris que hem intentat utilitzar pel total de les dades:
+
+```{r warning=FALSE}
+j <- 20
+
+fit_ch <- kmeansruns(MeansClassic, krange = 1:j, criterion = "ch")
+fit_ch$bestk
+
+fit_asw <- kmeansruns(MeansClassic, krange = 1:j, criterion = "asw")
+fit_asw$bestk
+```
+Per tant, obtenim dues possibilitats: 2 o 3 nodes. Veiem si gràficament obtenim quin és el nombre òptim de nodes.
+
+#### Representació gràfica
+
+Comencem amb 2 nodes:
+
+```{r}
+Classic2nod <- kmeans(MeansClassic,2)
+
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,2)], col=Classic2nod$cluster, main= "",xlab="soroll", ylab="instrumentalitat")
+plot(Classic[c(5,7)], col=Classic$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+En aquest gràfic veiem que els nodes no separen gaire correctament el tram de popularitat (25,50] de la resta que és el que potser faríem nosaltres a ull.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,3)], col=Classic2nod$cluster, main= "",xlab="soroll", ylab="positivitat")
+plot(Classic[c(5,9)], col=Classic$popularity4, main= "",xlab="soroll", ylab="positivitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Aquest gràfic sembla que separa correctament en dos nodes el tram (25,50] de la resta de trams. Tot i que podem veure que quan el soroll està entre -20 i -10 i la positivitat entre 0 i 0.4 el node negre falla prou a l'hora de classificar.
+Però podem afirmar que si una cançó de música clàssica és molt sorollosa i positiva tendirà a ser mediocre. Això vol dir que no serà un èxit però que tampoc tindrà una popularitat molt baixa.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,4)], col=Classic2nod$cluster, main= "",xlab="soroll", ylab="durada")
+plot(Classic[c(5,12)], col=Classic$popularity4, main= "",xlab="soroll", ylab="durada")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Aquest gràfic si que té dos nodes molt ben ajustats. I ens confirmen que si una cançó de música clàssica és molt sorollosa, tendirà a una popularitat no destacable.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(2,3)], col=Classic2nod$cluster, main= "",xlab="instrumentalitat", ylab="positivitat")
+plot(Classic[c(7,9)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+legend("bottom", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Ajusta bé, però perdem informació que amb algun altre mètode potser recollim, donat que ens agrupa els trams (0,25] amb el tram (50,75].
+Tot i així, podem afirmar que les cançons de música clàssica sense intrumentalitat també tenen una popularitat mediocre.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(3,4)], col=Classic2nod$cluster, main= "",xlab="positivitat", ylab="durada")
+plot(Classic[c(9,12)], col=Classic$popularity4, main= "",xlab="positivitat", ylab="durada")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Aquesta agrupació de les dades ens torna a separar el tram (25,50] de la resta de trams i ens fa deduir que les cançons de música clàssica que més durada tenen són les que tendeixen a tenir una popularitat mediocre.
+
+Com que els resultats amb dos nodes han estat bons però millorables dividirem les dades en 3 nodes:
+
+```{r}
+Classic4nod <- kmeans(MeansClassic,3)
+
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,2)], col=Classic4nod$cluster, main= "",xlab="soroll", ylab="instrumentalitat")
+plot(Classic[c(5,7)], col=Classic$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+No sembla que ajusti gaire bé els trams de popularitat a part del (25,50]. Haurem d'utilitzar un canvi de mètrica o bé un model Optics o dbscan.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,3)], col=Classic4nod$cluster, main= "",xlab="soroll", ylab="positivitat")
+plot(Classic[c(5,9)], col=Classic$popularity4, main= "",xlab="soroll", ylab="positivitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Aquí ocorre el mateix que en el primer gràfic. Si que és cert que el tram (25,50] està correctament agrupat però els altres dos no tenim una bona feina.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,4)], col=Classic4nod$cluster, main= "",xlab="soroll", ylab="durada")
+plot(Classic[c(5,12)], col=Classic$popularity4, main= "",xlab="soroll", ylab="durada")
+legend("topleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+El mateix problema que en l'anterior gràfic.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(2,3)], col=Classic4nod$cluster, main= "",xlab="instrumentalitat", ylab="positivitat")
+plot(Classic[c(7,9)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+legend("bottom", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Tenim el node verd que principalment és el tram de popularitat (25,50] i el node negre que principalment és el tram de popularitat (50,75].
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(3,4)], col=Classic4nod$cluster, main= "",xlab="positivitat", ylab="durada")
+plot(Classic[c(9,12)], col=Classic$popularity4, main= "",xlab="positivitat", ylab="durada")
+legend("topright", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Per aquest gràfic també hauríem de considerar aplicar un canvi de mètrica o un model Optics/dbscan.
+
+#### Conclusions
+
+Les conclusions d'aquest estudi són que 2 nodes és la millor manera d'aplicar k-means a aquest conjunt de dades en particular. Tot i així, hem de continuar l'estudi amb altres mètodes ja que amb dos nodes perdem prou informació.
+
+El que si és cert és que podem extreure informació del tram (25,50].
+
+Una cançó del gènere de música clàssica tendirà a tenir una popularitat de (25,50] si:
+
+ * És sorollosa i positiva.
+ * És molt sorollosa.
+ * No té instrumentalitat.
+ * Té una llarga durada.
+
+### Canvi de mètrica al model K-means
+
+Una de les opcions per a que la funció k-means ens ajusti millor els clusters és canviant la distància utilitzada. Normalment s'utilitza la distància euclidiana però en tenim més: Manhattan, Minkowski, la distància del cosinus o Jaccard en són alguns exemples.
+
+Com que no ens trobem en cap tipus de graella no té sentit utilitzar manhattan. D'altra banda, no tenim una quantitat de dades tan gran com per utilitzar la distància del cosinus i les variables són numèriques i no categòriques per utilitzar la distància de Jaccard. Potser podríem intentar aplicar la mesura de Minkowski amb un p adequat però hauríem de fer un estudi extens per a triar el número p òptim que ens prendria molt de temps.
+
+La nostra idea serà utilitzar el mètode del màxim:
+
+```{r message=FALSE, warning=FALSE}
+install.packages("amap", repos='http://cran.us.r-project.org')
+library(amap)
+```
+
+```{r}
+
+j <- 15
+
+res <- rep(0,j-1)
+clusters <- 2:j
+
+
+for (i in clusters) {
+  fit <- Kmeans(MeansClassic, i, iter.max = 20, method = "maximum")
+  res[i] <- sum(fit$withinss)
+}
+
+plot(2:j, res[2:j], type = "o", xlab = "Número de nodes", ylab="")
+```
+Si que és cert que en la resta de K-means hem aplicat més criteris a part de l'anterior. Ara bé, tot i que no sembla que tinguem una convergència en el número de nodes, el que volem fer canviant la distància és una millora respecte la classificació amb tres nodes.
+I, amb aquest criteri, podria millorar aquesta agrupació. Per tant:
+
+```{r}
+MaxClassic3nod <- Kmeans(MeansClassic, 3, method = "maximum")
+
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,2)], col=MaxClassic3nod$cluster, main= "",xlab="soroll", ylab="instrumentalitat")
+plot(Classic[c(5,7)], col=Classic$popularity4, main= "",xlab="soroll", ylab="instrumentalitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+No sembla que hi hagi una millora significativa.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,3)], col=MaxClassic3nod$cluster, main= "",xlab="soroll", ylab="positivitat")
+plot(Classic[c(5,9)], col=Classic$popularity4, main= "",xlab="soroll", ylab="positivitat")
+legend("bottomleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Tampoc classifica millor que amb la distància euclidiana.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(1,4)], col=MaxClassic3nod$cluster, main= "",xlab="soroll", ylab="durada")
+plot(Classic[c(5,12)], col=Classic$popularity4, main= "",xlab="soroll", ylab="durada")
+legend("topleft", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Sembla que classifica una mica millor que amb la distància euclidiana.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(2,3)], col=MaxClassic3nod$cluster, main= "",xlab="instrumentalitat", ylab="positivitat")
+plot(Classic[c(7,9)], col=Classic$popularity4, main= "",xlab="instrumentalitat", ylab="positivitat")
+legend("bottom", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+Aquí si que hi ha una millora en la classificació i podem extreure que les cançons del gènere de la música clàssica menys populars són molt instrumentals i positives.
+
+```{r}
+par(mfrow=c(2,1), plt = c(0.3,1,0.3,1))
+
+plot(MeansClassic[c(3,4)], col=MaxClassic3nod$cluster, main= "",xlab="positivitat", ylab="durada")
+plot(Classic[c(9,12)], col=Classic$popularity4, main= "",xlab="positivitat", ylab="durada")
+legend("topright", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+I aquí també obtenim una millor classificació dels nodes. Podem dir que les cançons positives si duren menys tindran més popularitat que si duren més i que les cançons del gènere clàssic que són negatives i no són curtes tenen una popularitat molt baixa.
+
+#### Conclusions
+
+Com que si que hem obtingut una millora significativa en els darrers gràfics i no un empitjorament amb els dos primers, no sembla una mala idea utilitzar aquesta nova mesura.
+
+De fet, gràcies a aquesta nova mesura podem veure que les cançons de música clàssica negatives tindran menys popularitat que les més positives a no ser que siguin més curtes que la majoria o que no siguin instrumentals.
+
+Per contra, si les cançons de música clàssica són positives, curtes i instrumentals tendeixen a ser més populars.
+
+Ara bé, hem d'anar amb molt de compte amb la fiabilitat d'aquest resultat i estaria bé aplicar altres mètodes com Optics o dbscan.
+
+### Agrupant la música clàssica amb Optics i dbscan
+
+El primer que farem serà triar un gràfic que ens serveixi per a agrupar per densitat.
+Pel que hem vist en els anteriors apartats, el gràfic de durada amb la positivitat és una bona opció, donat que el gràfic és:
+
+```{r}
+posdur <- Classic[c(9,12)]
+
+plot(posdur, col=Classic$popularity4, main= "",xlab="positivitat", ylab="durada")
+legend("topright", legend = levels(Classic$popularity4), fill = unique(Classic$popularity4), cex = 0.8)
+```
+
+N'hi ha tres grups prou separats i cadascun d'ells tenen una densitat destacable.
+
+#### Optics
+
+Comencem endreçant les observacions:
+
+```{r message=FALSE, warning=FALSE}
+if (!require('dbscan')) install.packages('dbscan'); library('dbscan')
+```
+```{r}
+set.seed(3)
+Opt <- optics(posdur, minPts = 10)
+Opt
+Opt$order
+```
+On veurem que el diagrama d'accessibilitat és:
+
+```{r}
+plot(Opt, col="skyblue3")
+```
+
+Veiem que tenim una vall marcada i sembla que la nostra idea de tenir tres nodes no és gaire encertada al menys considerant que el mínim de punts és 10. Tot i així, anem a veure quin és el número de clusters més adequat.
+
+Utilitzarem dbscan, el mínim de punts hem dit que eren 10, però quin és el radi que hem de seleccionar?
+
+#### Dbscan
+
+##### Canvi de radi
+
+Intentem arribar als dos nodes, pel gràfic sabem que ens trobem al voltant de 0.4:
+
+```{r}
+db1 <- extractDBSCAN(Opt, eps_cl = 0.4)
+db1
+plot(db1)
+```
+
+Amb una mica de prova i error arribem al valor on obtenim dos nodes: 0.38.
+
+```{r}
+db2 <- extractDBSCAN(Opt, eps_cl = 0.38)
+db2
+plot(db2)
+```
+
+I apropant-nos una mica més podem trobar un èpsilon que ens dona 3 nodes: 0.37.
+
+```{r}
+db3 <- extractDBSCAN(Opt, eps_cl = 0.37)
+db3
+plot(db3)
+```
+
+Obtenim dos models diferents un amb èpsilon 0.38 i un amb èpsilon 0.37.
+Avaluem quin model és més òptim. Calculem l'índex de Calinski-Harabasz per a cadascun d'ells.
+
+Primer el model amb dos nodes:
+
+```{r}
+posdurMeans2 <- matrix(rep(0,2*max(db2$cluster)), nrow = max(db2$cluster), ncol = 2)
+
+for (i in 0:max(db2$cluster)) {
+  posdurMeans2[i,1] <- colMeans(posdur[db2$cluster == i,])[1]
+  posdurMeans2[i,2] <- colMeans(posdur[db2$cluster == i,])[2]
+}
+
+posdurMeans2
+
+suma2 <- 0
+
+for (j in 1:max(db2$cluster)) {
+  Gj <- nrow(posdur[db2$cluster == j,])
+  suma2 <- suma2+Gj*(colMeans(posdur[1])-posdurMeans2[j,1])^2
+}
+
+for (j in 1:max(db2$cluster)) {
+  Gj <- nrow(posdur[db2$cluster == j,])
+  suma2 <- suma2+Gj*(colMeans(posdur[2])-posdurMeans2[j,2])^2
+}
+
+CH2 <- suma2/(max(db2$cluster)-1)
+as.numeric(CH2)
+```
+Ara el de 3 nodes:
+
+```{r}
+posdurMeans3 <- matrix(rep(0,2*max(db3$cluster)), nrow = max(db3$cluster), ncol = 2)
+
+for (i in 0:max(db3$cluster)) {
+  posdurMeans3[i,1] <- colMeans(posdur[db3$cluster == i,])[1]
+  posdurMeans3[i,2] <- colMeans(posdur[db3$cluster == i,])[2]
+}
+
+posdurMeans3
+
+suma3 <- 0
+
+for (j in 1:max(db3$cluster)) {
+  Gj <- nrow(posdur[db3$cluster == j,])
+  suma3 <- suma3+Gj*(colMeans(posdur[1])-posdurMeans3[j,1])^2
+}
+
+for (j in 1:max(db3$cluster)) {
+  Gj <- nrow(posdur[db3$cluster == j,])
+  suma3 <- suma3+Gj*(colMeans(posdur[2])-posdurMeans3[j,2])^2
+}
+
+CH3 <- suma3/(max(db3$cluster)-1)
+as.numeric(CH3)
+```
+Veiem que els tres nodes donen millor resultat que no pas els dos donat que el criteri de Calinski-Harabasz dels tres nodes és més elevat que el de dos.
+
+##### Canvi de mínim de punts
+
+Abans d'analitzar el model de dbscan, canviarem el mínim de punts a 8 a veure si hi ha algun gràfic d'accessibilitat que ens cridi l'atenció per a aplicar un model de 3 nodes:
+
+```{r}
+Opt3 <- optics(posdur, minPts = 8)
+Opt3
+#Opt3$order
+plot(Opt3)
+```
+
+Sembla que per un èpsilon adequat podem trobar una agrupació amb tres nodes:
+
+```{r}
+db3min3 <- extractDBSCAN(Opt3, eps_cl = 0.31)
+db3min3
+plot(db3min3)
+```
+
+I també podem trobar un èpsilon amb dos nodes que ens agrupa de manera diferent els dos nodes:
+
+```{r}
+db2min3 <- extractDBSCAN(Opt3, eps_cl = 0.32)
+db2min3
+plot(db2min3)
+```
+Veiem quin és el valor del criteri Calinski-Harabasz d'aquests models:
+
+```{r}
+posdurMeans3min3 <- matrix(rep(0,2*max(db3min3$cluster)), nrow = max(db3min3$cluster), ncol = 2)
+
+for (i in 0:max(db3min3$cluster)) {
+  posdurMeans3min3[i,1] <- colMeans(posdur[db3min3$cluster == i,])[1]
+  posdurMeans3min3[i,2] <- colMeans(posdur[db3min3$cluster == i,])[2]
+}
+
+posdurMeans3min3
+
+suma3min3 <- 0
+
+for (j in 1:max(db3min3$cluster)) {
+  Gj <- nrow(posdur[db3min3$cluster == j,])
+  suma3min3 <- suma3min3+Gj*(colMeans(posdur[1])-posdurMeans3min3[j,1])^2
+}
+
+for (j in 1:max(db3min3$cluster)) {
+  Gj <- nrow(posdur[db3min3$cluster == j,])
+  suma3min3 <- suma3min3+Gj*(colMeans(posdur[2])-posdurMeans3min3[j,2])^2
+}
+
+CH3min3 <- suma3min3/(max(db3min3$cluster)-1)
+as.numeric(CH3min3)
+```
+```{r}
+posdurMeans2min3 <- matrix(rep(0,2*max(db2min3$cluster)), nrow = max(db2min3$cluster), ncol = 2)
+
+for (i in 0:max(db2min3$cluster)) {
+  posdurMeans2min3[i,1] <- colMeans(posdur[db2min3$cluster == i,])[1]
+  posdurMeans2min3[i,2] <- colMeans(posdur[db2min3$cluster == i,])[2]
+}
+
+posdurMeans2min3
+
+suma2min3 <- 0
+
+for (j in 1:max(db2min3$cluster)) {
+  Gj <- nrow(posdur[db2min3$cluster == j,])
+  suma2min3 <- suma2min3+Gj*(colMeans(posdur[1])-posdurMeans2min3[j,1])^2
+}
+
+for (j in 1:max(db2min3$cluster)) {
+  Gj <- nrow(posdur[db2min3$cluster == j,])
+  suma2min3 <- suma2min3+Gj*(colMeans(posdur[2])-posdurMeans2min3[j,2])^2
+}
+
+CH2min3 <- suma2min3/(max(db2min3$cluster)-1)
+as.numeric(CH2min3)
+```
+Destaquem que triant un número mínim de 8 punts el que millor resultat dona és el de 2 nodes. I, és millor que el de tres nodes amb un mínim de 10 punts.
+
+Malgrat tot, comprovarem els gràfics de dos nodes amb el mínim de 8 punts i el de tres nodes amb un mínim de 10 punts.
+
+La representació gràfica de tots dos és:
+
+```{r}
+hullplot(posdur, db2min3)
+```
+
+```{r}
+hullplot(posdur, db3)
+```
+
+Observem que els tres nodes no ajusten les dades com voldríem. Els nodes vermell i blau haurien d'estar agrupats com en el gràfic de dos nodes. I obtenim un molt bon resultat amb dos nodes.
+
+#### Conclusions
+
+Per tant, el millor model en dbscan i Optics és el de minim de 8 punts i èpsilon 0.32 On es creen dos clusters:
+
+  * cluster vermell: Son cançons de música clàssica amb poca popularitat.
+  * cluster verd: Son cançons de música clàssica amb més popularitat.
+
+Per tant, obtenim que les cançons de música clàssica més curtes són més populars.
+
+A més, aquesta informació confirma les conclusions dels models de k-means que hem fet.
+Ara bé, és aquest model millor que el de k-means?
+La resposta és que si que és millor que el model de k-means amb la distància euclidiana però perdem informació respecte el model amb la distància del màxim.
+
+Recordem que el model de k-means amb la distància del màxim ens dona informació dels tres trams de popularitat, podent afirmar que la positivat d'una cançó té efecte en la popularitat. Informació que amb optics i dbscan perdem!
+
+De manera que, de moment, podem afirmar que el millor model per a predir la popularitat de les cançons és el k-means de 3 nodes amb la distància del màxim.
+
+### Regles pel conjunt total de cançons
+
+Ja hem vist que per alguns gèneres amb unes normes molt definides si que podem agrupar les dades per extreure conclusions respecte a la popularitat. Ara bé, podem aplicar algorismes per entendre la popularitat en la música amb certes regles?
+
+Veiem-ho.
+
+#### Arbres de decisió per trobar regles respecte la popularitat
+
+Començarem aplicant arbres de decisió al joc de dades que tenim.
+
+#####Conjunt d'entrenament i d'avaluació
+
+Ja sabem que el primer que hem de fer és preparar les dades, recordem que necessitem un conjunt d'entrenament i un d'avaluació.
+
+```{r}
+names(Spotifynew)
+```
+Veiem que hem d'eliminar el track_id i la popularitat com a enter.
+
+```{r}
+y <- Spotifynew[,13]
+X <- Spotifynew[,-c(1,2)]
+```
+
+```{r}
+Tauladades <- data.frame()
+
+for(genere in unique(Spotifynew$track_genre)){
+  dadesgenere <- subset(Spotifynew, track_genre == genere)
+  
+  index <- sample(1:1000, size = 667)
+  
+  genereXy <- dadesgenere[index, -2]
+  
+  Tauladades <- rbind(Tauladades, genereXy)
+}
+
+Tauladades <- Tauladades[!is.na(Tauladades$track_id),]
+head(Tauladades)
+names(Tauladades)[c(1,12)]
+
+TrainX <- Tauladades[,-c(1,12)]
+Trainy <- Tauladades[,12]
+```
+
+```{r}
+Test <- anti_join(Spotifynew[,-2], Tauladades, by = c("track_id","track_genre","popularity4"))
+TestX <- Test[,-c(1,12)]
+Testy <- Test[,12]
+```
+
+Veiem que no hi han esbiaixaments en la selecció de dades:
+
+```{r}
+summary(TrainX)
+```
+Veiem el resum del conjunt per avaluar les dades:
+
+```{r}
+summary(TestX)
+prop.table(table(TestX$explicit))
+```
+Comparem les proporcions:
+
+```{r collapse=TRUE}
+vector <- c(1,2,4,8)
+
+for (i in vector) {
+  cat("Proporcions de la variable",names(TestX)[i],":\n\n")
+  print(prop.table(table(TestX[i])))
+  print(prop.table(table(TrainX[i])))
+  cat("\n\n")
+}
+
+for (i in c(3,5:7,9,10)) {
+  cat("Resum de la variable",names(TestX)[i],":\n\n")
+  print(summary(TrainX[i]))
+  print(summary(TestX[i]))
+  cat("\n\n")
+}
+
+```
+Les proporcions i els resums ens diuen que hem fet una bona partició de les dades i, per tant, podem continuar.
+
+Recordem que tots 
+
+##### Construcció de l'arbre de decisió
+
+Anem a crear el model.
+
+```{r}
+if(!require(ggpubr)){
+    install.packages('ggpubr', repos='http://cran.us.r-project.org')
+    library(ggpubr)
+}
+
+if(!require(C50)){
+    install.packages('C50', repos='http://cran.us.r-project.org')
+    library(C50)
+}
+```
+
+```{r}
+arbre1 <- C50::C5.0(TrainX,Trainy, rules = TRUE)
+sum <- summary(arbre1)
+```
+
+Obtenim un model amb moltes normes:
+
+```{r}
+library(stringr)
+normes <- unlist(strsplit(sum$output, "\n\nRule "))
+length(normes)
+```
+En concret 994, per tant anem a fer un data frame per a utilitzar aquestes normes d'una manera senzilla:
+
+```{r}
+Normes <- data.frame(Norma = integer(),
+                     Parentesi = character(),
+                     Condicions = character(),
+                     Classe = character(),
+                     Probabilitat = numeric()
+                     )
+
+Normes <- Normes[seq_len(length(normes) - 2), ]
+
+for (i in 2:(length(normes)-1)) {
+  Normes$Norma[i-1] <- as.integer(str_extract(normes[i], "^\\d+"))
+  Normes$Parentesi[i-1] <- str_extract(normes[i], "\\(.*?\\)")
+  Normes$Condicions[i-1] <- str_extract(normes[i], "(?s)\\)\n\t(.*)\n\t->")
+  Normes$Classe[i-1] <- str_extract(normes[i], "class (\\(|\\[)[^\\]]*\\]")
+  Normes$Probabilitat[i-1] <- as.numeric(str_extract(normes[i], "(?<=\\[)[0-9.]+(?=\\])"))
+}
+```
+
+```{r}
+head(Normes)
+```
+Ens interessen les normes que més encerten a l'hora de classificar les dades. Mirarem les tres primeres, com que per l'extracció de les normes les obtenim endreçades, només cal fer el següent:
+
+```{r}
+cat(Normes[1,2], Normes[1,3], Normes[1,4], Normes[1,5],"\n")
+cat(Normes[1,2], Normes[2,3], Normes[2,4], Normes[2,5],"\n")
+cat(Normes[1,2], Normes[3,3], Normes[3,4], Normes[3,5],"\n")
+```
+El més curiós de les tres primeres regles és que les tres regles han classificat correctament 40 casos, cap mal classificat i que tenim encertem un 2.5 més que si ho féssim a l'atzar.
+
+La primera regla diu que les cançons de cantautor que no estan en Si bemoll i Si, molt sorolloses, amb molt poca instrumentalitat, no tocades en directe i llargues tenen una gran probabilitat de no ser gens populars.
+
+La segona regla ens diu que les cançons dels gèneres rock alternatiu i indie, que no són explícites, que són o molt sorolloses o molt poc, gravades en estudi, molt positives i llargues també tenen una gran probabilitat de no ser populars.
+
+Per últim, la tercera regla ens diu que les cançons dels gèneres dub i rock & roll, molt instrumentals, amb lletres no explícites, claus superiors al Sol sostingut i o massa positives o massa negatives també tenen grans probabilitats de no ser populars.
+
+En general, d'aquestes dades podem extreure que el gènere és molt important a l'hora de saber quins paràmetres són els que defineixen la probabilitat de que una cançó no sigui popular. I, de fet, si fem el summary sense les regles podem trobar la representació de l'arbre i els  atributs més importants.
+
+```{r}
+arbre1 <- C50::C5.0(TrainX,Trainy)
+#summary(arbre1)
+```
+On obtenim que el gènere és l'atribut més important, seguit del volum i si la cançó és explícita o no. I, a més, obtenim que l'error és del 22%, que és alt però no terrible i podem veure que classifica molt bé les cançons amb poca popularitat. 
+Veiem si el model és vàlid.
+
+##### Validació del model
+
+Utilitzarem el conjunt d'avaluació per a analitzar la qualitat del model.
+
+```{r}
+prediccio_arbre1 <- predict(arbre1,TestX, type="class")
+cat("La predicció de l'arbre 1 és:", 100*sum(prediccio_arbre1 == Testy) / length(prediccio_arbre1),"%")
+```
+La predicció és molt baixa. Veiem la matriu de confusió:
+
+```{r}
+matriuConf <- table(Testy,Predicted= prediccio_arbre1)
+matriuConf
+```
+I, amb aquesta matriu:
+
+```{r}
+percentcorrecte <- 100*sum(diag(matriuConf))/sum(matriuConf)
+cat("El percentatge de registres correctament classificats és:",percentcorrecte,"%")
+```
+Ja veiem que, en general, aquest model és prou dolent per predir la popularitat. Però, hi ha algun tram de popularitat que classifiqui prou bé?
+
+```{r}
+if(!require(gmodels)){
+    install.packages('gmodels', repos='http://cran.us.r-project.org')
+    library(gmodels)
+}
+```
+
+```{r}
+CrossTable(Testy, prediccio_arbre1, prop.chisq = FALSE, prop.r = FALSE, prop.c = FALSE, dnn = c('Realitat', 'Prediccio'))
+```
+Aquest model no és vàlid, no ens dona cap informació a l'hora de classificar una cançó com a popular ni tampoc com a no popular.
+
+Molt probablement això es deu a la gran quantitat de dades i per la gran barreja de generes que tenim. Per tant, construirem un nou model però seleccionant un gènere en particular.
+
+En la realització del model de k-means hem obtingut que el Dance tenia una bona proporció de cançons molt populars i cançons que no ho eren tant. Veiem si amb un arbre de decisió obtenim un model per predir si una cançó Dance serà popular o no.
+
+#### Arbre de decisió de la música Dance
+
+##### Construcció dels conjunts d'avaluació i entrenament
+
+Primer hem de crear els conjunts que, en aquest cas serà prou fàcil:
+
+```{r}
+DanceTrain <- subset(Tauladades, Tauladades$track_genre == "dance")
+
+DanceTrainX <- DanceTrain[,-c(1,12)]
+DanceTrainy <- DanceTrain[,12]
+```
+
+I el conjunt d'avaluació:
+
+```{r}
+DanceTest <- subset(Test, Test$track_genre == "dance")
+
+DanceTestX <- DanceTest[,-c(1,12)]
+DanceTesty <- DanceTest[,12]
+```
+
+##### Construcció del model
+
+Una vegada tenim els subconjunts, anem a veure el model que podem construir:
+
+```{r}
+Dance1 <- C50::C5.0(DanceTrainX,DanceTrainy, rules = TRUE)
+summary(Dance1)
+```
+Aquest model té un error del 15.6% però ja en la distribució del errors podem veure que classifica molt bé les cançons amb poca popularitat.
+
+És interessant veure com la durada de la cançó té tant d'impacte i la resta d'atributs tenen tan poc.
+Abans d'explicar les regles una a una mirem la representació gràfica de l'arbre:
+
+```{r}
+library(C50)
+library(grid)
+
+Dance1 <- C50::C5.0(DanceTrainX,DanceTrainy)
+plot(Dance1, gp = gpar(fontsize = 6))
+```
+Veiem que el fet de tenir variables numèriques provoca arbres complexos amb representacions gràfiques difícils d'entendre. Canviarem una mica el conjunt i factoritzarem les variables per a tenir arbres més simples:
+
+Modifiquem les dades:
+
+```{r}
+DanceTrainX2 <- data.frame(
+  key = as.factor(DanceTrainX$key),
+  loudness = cut(DanceTrainX$loudness, c(-12,-8.5,-5,-1.5), labels = c("baix", "mig", "alt")),
+  mode = as.factor(DanceTrainX$mode),
+  instrumentalness = cut(DanceTrainX$instrumentalness, c(-0.1,0.25,0.5,0.75,1), labels = c("baixa", "mig baixa", "mig alta", "alta")),
+  liveness = cut(DanceTrainX$liveness, c(-0.1,0.25,0.5,0.75,1), labels = c("baixa", "mig baixa", "mig alta", "alta")),
+  valence = cut(DanceTrainX$valence, c(-0.1,0.25,0.5,0.75,1), labels = c("baixa", "mig baixa", "mig alta", "alta")),
+  time_signature = as.factor(DanceTrainX$time_signature),
+  durationscale = cut(DanceTrainX$durationscale, c(-2.05,-1,0,1,2), labels = c("baixa", "mig baixa", "mig alta", "alta"))
+)
+head(DanceTrainX2)
+```
+Ara que tenim totes les variables factoritzades, veiem com canvia l'arbre de decisió:
+
+```{r}
+Dance2 <- C50::C5.0(DanceTrainX2,DanceTrainy, rules = TRUE)
+summary(Dance2)
+```
+Observem que aquest model té un error del 31% i ho ha classificat tot com en la popularitat més baixa. Descartarem aquest model i ens quedarem amb l'anterior.
+
+Per tant, anem a validar l'anterior model.
+
+##### Validació del model
+
+Calculem la matriu de confusió:
+
+```{r}
+prediccio_Dance1 <- predict(Dance1,TestX, type="class")
+matriuConfDance1 <- table(Testy,Predicted= prediccio_Dance1)
+matriuConfDance1
+```
+I, amb aquesta matriu:
+
+```{r}
+percentcorrecte <- 100*sum(diag(matriuConfDance1))/sum(matriuConfDance1)
+cat("El percentatge de registres correctament classificats és:",percentcorrecte,"%")
+```
+No obtenim una millora significativa davant de l'arbre fet amb totes les dades.
+
+Tot i així, analitzem els errors:
+
+```{r}
+CrossTable(Testy, prediccio_Dance1, prop.chisq = FALSE, prop.r = FALSE, prop.c = FALSE, dnn = c('Realitat', 'Prediccio'))
+```
+Si hi ha alguna cosa que podem afirmar d'aquest model es que no serveix per a classificar si una cançó serà un èxit, donat que les probabilitats de que encerti són baixíssimes. Malgrat tot, sembla que si que podem crear un model per predir si la cançó serà molt poc popular. El problema és que hem de modificar aquest arbre donat que té una capacitat d'encert que encara és molt millorable.
+
+Provarem a millorar-lo podant l'arbre.
+
+#### Podant l'arbre
+
+Com hem vist en la creació del model aquest arbre utilitza 8 variables, la importància de les quals varia molt:
+
+| Percentage | Atribute usage   |
+|------------|------------------|
+| 100.00%    | durationscale    |
+| 13.16%     | key              |
+| 13.16%     | liveness         |
+| 12.54%     | mode             |
+| 10.99%     | explicit         |
+| 9.60%      | valence          |
+| 7.43%      | instrumentalness |
+| 6.66%      | loudness         |
+
+Sabem que la durada és un paràmetre que ha de ser-hi donat que la seva utilització és del 100%. Però, milloraria el model si li traiem més variables?
+
+Li retirarem les variables que menys s'utilitzin. Retirarem la signatura perquè la seva participació és molt baixa en la utilització d'atributs i també el gènere donat que només hi ha un.
+
+Ara la part interessant és treure la resta de variables.
+
+Primer traurem el soroll:
+
+```{r}
+Dancesense1 <- C50::C5.0(DanceTrainX[,-c(8,9,3)],DanceTrainy, rules = TRUE)
+summary(Dancesense1)
+```
+Observem que l'error baixa fins al 17%.
+Eliminem una altra variable, l'instrumentalitat:
+
+```{r}
+Dancesense2 <- C50::C5.0(DanceTrainX[,-c(8,9,3,5)],DanceTrainy, rules = TRUE)
+summary(Dancesense2)
+```
+L'error puja a un 21.1%.
+
+Traiem una altra diferent, la positivitat:
+
+```{r}
+Dancesense3 <- C50::C5.0(DanceTrainX[,-c(8,9,3,7)],DanceTrainy, rules = TRUE)
+summary(Dancesense3)
+```
+L'error baixa però no tan com quan hem eliminat una sola variable i per tant triarem el model de l'arbre sense 1 variables.
+
+```{r}
+Dance1podat <- C50::C5.0(DanceTrainX[,-c(8,9,3)],DanceTrainy)
+plot(Dance1podat, gp = gpar(fontsize = 3))
+```
+Validem-lo
+
+##### Validació del model
+
+```{r}
+prediccio_Dance1podat <- predict(Dance1podat,TestX[-c(8,9,3)], type="class")
+cat("La predicció de l'arbre és:", 100*sum(prediccio_Dance1podat == Testy) / length(prediccio_Dance1podat),"%")
+```
+Veiem els errors:
+
+```{r}
+CrossTable(Testy, predict(Dance1podat,TestX[-c(8,9,3)], type="class"), prop.chisq = FALSE, prop.r = FALSE, prop.c = FALSE, dnn = c('Realitat', 'Prediccio'))
+```
+Aquest model no és bo per predir, i no millora l'arbre sense podar. Hem de trobar una altra solució més adequada i aplicarem adaptative boosting com a últim model.
+
+#### Adaptative boosting sobre el Dance
+
+Aplicarem un model d'arbre de decisió sobre totes les variables amb 100 trials per l'adaptative boosting:
+
+```{r}
+Dance3 <- C50::C5.0(DanceTrainX[,-c(8,9)],DanceTrainy, trials=100, rules = TRUE)
+summary(Dance3)
+```
+S'ha aturat en 6 trials. L'error sembla que es classifica millor. Veiem si la millora és prou bona aplicant criteris de validació.
+
+##### Validació del model
+
+Tornem a aplicar els criteris de validació:
+
+```{r}
+prediccio_Dance3 <- predict(Dance3,TestX, type="class")
+cat("La predicció de l'arbre amb adaptative boosting és:", 100*sum(prediccio_Dance3 == Testy) / length(prediccio_Dance3),"%")
+```
+La predicció és molt dolenta i no trobem un bon model d'arbre de decisió per al conjunt de dades que tenim.
+#### Conclusions
+
+El millor arbre és el que té totes les dades. Si bé ens pensàvem que milloraria restringint les dades a un sol gènere, el gènere que hem triat no ha facilitat obtenir arbres amb millors resultats.
+
+Tot i així, no cal desanimar-se. La nostra anàlisi acaba aquí però si que podem estudiar arbres de decisió per a cada gènere en particular i, fins i tot, ens falta aplicar poda i adaptative boosting a totes les dades juntes. També podríem modificar la popularitat i dividir-la en només dos trams: poca popularitat de 0 a 49 i populars de 50 a 100.
+
+Per tant, el temps per a nosaltres és una limitació però hi han opcions de millora i prous paràmetres per modificar com per a trobar un bon model i no rendir-se.
+
+#### Random forest per a totes les dades
+
+El primer que farem és crear un random forest.
+
+```{r message=FALSE, warning=FALSE}
+if(!require(randomForest)){
+  install.packages('randomForest',repos='http://cran.us.r-project.org')
+  library(randomForest)
+}
+
+if(!require(iml)){
+  install.packages('iml', repos='http://cran.us.r-project.org')
+  library(iml)
+}
+```
+
+No podem fer random forest amb més de 53 categories. Per tant, hem de prendre només un gènere musical. Triarem el Dance per veure si podem trobar un model que ens predigui si una cançó serà popular o no.
+
+```{r}
+set.seed(3)
+forest <- randomForest(popularity4 ~., data = DanceTrain[,-c(1,10)], ntree = 500)
+```
+
+Veiem la impartància de cada variable per a les prediccions:
+
+```{r}
+pred <- Predictor$new(forest, data = DanceTrainX[,-9], y = as.numeric(DanceTrainy))
+imp <- FeatureImp$new(pred, loss = "ce",compare = "difference")
+plot(imp)
+```
+Totes les variables són igual d'importants. Donem una ullada a les ALE's per a cada variable:
+
+```{r message=FALSE, warning=FALSE}
+if(!require(patchwork)){
+    install.packages('patchwork',repos='http://cran.us.r-project.org')
+    library(patchwork)
+}
+```
+
+```{r}
+effs <- FeatureEffects$new(pred,grid.size = 30)
+```
+
+Representem les ALE's:
+
+```{r}
+lowexp <- ggplot(effs$results[[1]][effs$results[[1]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Explicit poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighexp <- ggplot(effs$results[[1]][effs$results[[1]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Explicit prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highexp <- ggplot(effs$results[[1]][effs$results[[1]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Explicit molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowexp + midhighexp + highexp +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Explícit")
+```
+Com ens podem adonar. Si les lletres són explícites seran molt populars. Té sentit donat que el Dance és un estil de música que agrada a la gent jove, que li poden agradar aquestes lletres per rebels i irreverents.
+
+```{r}
+
+lowkey <- ggplot(effs$results[[2]][effs$results[[2]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Clau poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighkey <- ggplot(effs$results[[2]][effs$results[[2]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Clau prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highkey <- ggplot(effs$results[[2]][effs$results[[2]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Clau molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowkey + midhighkey + highkey +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Clau")
+```
+Les cançons més populars estan en clau de Si.
+
+```{r}
+lowlou <- ggplot(effs$results[[3]][effs$results[[3]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Soroll poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighlou <- ggplot(effs$results[[3]][effs$results[[3]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Soroll prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highlou <- ggplot(effs$results[[3]][effs$results[[3]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Soroll molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowlou + midhighlou + highlou +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Soroll")
+```
+El resultat que obtenim no és gens estrany. Les cançons amb més volum són les que més popularitat tenen.
+
+```{r}
+lowmod <- ggplot(effs$results[[4]][effs$results[[4]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Mode poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighmod <- ggplot(effs$results[[4]][effs$results[[4]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Mode prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowmod + midhighmod +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Mode")
+```
+No sembla que si la cançó estigui en major o menor influeixi en la popularitat més alta.
+
+```{r}
+lowins <- ggplot(effs$results[[5]][effs$results[[5]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Instrumentalitat poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighins <- ggplot(effs$results[[5]][effs$results[[5]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Instrumentalitat prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highins <- ggplot(effs$results[[5]][effs$results[[5]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Instrumentalitat molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowins + midhighins + highins +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Instrumentalitat")
+```
+Observem que no sembla que tingui cap influència. Mirem els valors:
+
+```{r}
+head(effs$results[[5]],10)
+```
+Els valors són tan baixos que no els tindrem en compte.
+
+```{r}
+lowviu <- ggplot(effs$results[[6]][effs$results[[6]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("En viu poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighviu <- ggplot(effs$results[[6]][effs$results[[6]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("En viu prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highviu <- ggplot(effs$results[[6]][effs$results[[6]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("En viu molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowviu + midhighviu + highviu +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "En viu")
+```
+Podem veure com per a que una cançó sigui molt popular no hauria d'estar gravada en directe però tampoc com a un estudi de gravació. Hi ha un punt de gravació amb qualitat d'estudi però que tingui tocs de música en directe petits o subtils. Si ens passem sonant massa en directe, perdrem popularitat ràpidament. Això en referència a la música Dance, altres gèneres segur que reaccionen d'una manera diferent.
+
+```{r}
+lowval <- ggplot(effs$results[[7]][effs$results[[7]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Positivitat poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighval <- ggplot(effs$results[[7]][effs$results[[7]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Positivitat prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highval <- ggplot(effs$results[[7]][effs$results[[7]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Positivitat molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowval + midhighval + highval +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Positivitat")
+```
+Podem veure que la positivitat té un gran impacte en la popularitat. Les cançons massa positives no solen tenir una popularitat desmesurada. El que si que podem veure és que les cançons que no són ni positives ni tristes tenen gran probabilitats d'acabar no sent gens populars.
+
+```{r}
+lowtim <- ggplot(effs$results[[8]][effs$results[[8]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Compàs poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhightim <- ggplot(effs$results[[8]][effs$results[[8]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Compàs prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+hightim <- ggplot(effs$results[[8]][effs$results[[8]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Compàs molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowtim + midhightim + hightim +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Compàs")
+```
+Aquest gràfic és prou clar, el compàs més popular és 3/4. També cal tenir en compte que tenim moltes cançons en 4/4 i menys en 3/4 i que ens trobem davant d'un esbiaixament de supervivència, només les cançons en 3/4 que són populars han estat introduïdes a la llista!
+
+```{r}
+lowdur <- ggplot(effs$results[[9]][effs$results[[9]]$.class == ".0.25.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "brown")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Durada poc popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+midhighdur <- ggplot(effs$results[[9]][effs$results[[9]]$.class == ".50.75.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "chocolate")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Durada prou popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+highdur <- ggplot(effs$results[[9]][effs$results[[9]]$.class == ".75.100.",], aes(x = .borders, y=.value))+
+  geom_bar(stat = "identity", fill = "darkgreen")+
+  xlab(NULL) + ylab(NULL)+
+  ggtitle("Durada molt popular")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+lowdur + midhighdur + highdur +
+  plot_layout(ncol = 2, widths = c(0.5,0.5)) +
+  plot_annotation(title = "Durada")
+```
+I, com venint confirmant amb tots els models i amb tots els anàlisi de dades que hem fet, les cançons més populars són les més curtes. Podem afegir que, a més les cançons amb una popularitat per sobre de la mitjana però no molt populars són les que duren només una mica més que la mitjana. Però, en general, a més durada menys popularitat.
+
+##### Conclusions
+
+Aquest model no té mala pinta per al gènere Dance. Hem descobert que en aquest gènere les lletres explícites triomfen, probablement per l'edat dels que l'escolten; també hem vist que l'escala de Si dona molta popularitat i que el compàs 3/4 és un gran indicador d'èxit. Però també hem confirmat el que ja havíem vist en altres models com que la durada afecta a la popularitat.
+
+En general no sembla un mal model per a triar.
+
+#### Conclusions del treball
+
+En aquest treball hem vist diferents models que ens han portat a les conclusions que explicarem en aquest apartat.
+
+Per començar, en el model de k-means hem vist que:
+
+  * Fer un scatter-plot abans de mirar quin número de nodes podem aplicar és molt bona idea. Si no veiem que hi han certs grups en un scatter-plot, només estem perdent temps amb un cost computacional molt elevat.
+  
+  * Si el número de dades és molt gran, el temps de computació serà desmesurat i els nodes poden no ser comprensibles. Si això passa és millor prendre una mostra de les dades o fer més específica la nostra cerca, per exemple, prenent només un gènere com hem fet nosaltres.
+
+  * A vegades volem tenir un número de nodes concret perquè és el que ens sembla correcte. Però k-means va de trobar el número de nodes adequat; sinó tenim molts errors o una classificació poc acurada. Tenim mètodes d'agrupació supervisats per trobar la classificació amb el número de nodes que volem.
+  
+  * La millor manera de classificar la música clàssica és amb dos nodes.
+  
+  *  Una cançó del gènere de música clàssica tendirà a tenir una popularitat de (25,50] si:
+
+    * És sorollosa i positiva.
+    * És molt sorollosa.
+    * No té instrumentalitat.
+    * Té una llarga durada.
+
+  * Si un model de k-means no ens acaba de donar bon resultat, podem canviar-li la distància utilitzada. En el nostre cas hem obtingut millors resultats amb la distància del màxim que amb la distància euclidiana.
+
+  * Les cançons de música clàssica negatives tindran menys popularitat que les més positives a no ser que siguin més curtes que la majoria o que no siguin instrumentals.
+
+  * Si les cançons de música clàssica són positives, curtes i instrumentals tendeixen a ser més populars.
+
+Una vegada teníem les dades de la música clàssica volíem comprovar si l'agrupació per densitat era millor que k-means.
+
+Aplicant el model optics i dbscan hem obtingut les conclusions:
+
+  * El millor model en dbscan i Optics és el de mínim de 8 punts i èpsilon 0.32 On es creen dos clusters: un que indica poca popularitat i un altre que n'indica més.
+
+  * Les cançons de música clàssica més curtes són més populars.
+
+  * El model que hem dut a terme és millor que el k-means amb la distància euclidiana però no és millor que el k-means amb la distància del màxim. No sempre Optics i dbscan són millors que k-means, cadascun té la seva aplicació.
+
+Posteriorment hem obtingut les dades i regles de tot el conjunt de dades amb arbres de decisió. D'on hem conclòs que:
+
+  * Els arbres de decisió amb moltes dades creen moltes regles, que indueixen a resultats intel·ligibles.
+  
+  * El models obtinguts no sempre són bons, obtenint prediccions no gaire millors del 60%.
+  
+  * Factoritzar les variables numèriques no sempre ens porta a arbres de decisió més acurats. Triar talls aleatoris en les dades sense fer un estudi de com tallar les dades també ens pot donar unes prediccions dolentes.
+
+  * Triar un subconjunt de les dades no sempre millora la capacitat de predicció del model. Pensàvem que triant només un gènere tindríem un model més precís i no ha estat el cas.
+  
+  * Aplicar adaptative boosting o poda no sempre funciona i a vegades és millor no aplicar-lo. El nostre model ha empitjorat quan li hem aplicat aquests mètodes. Potser amb una altra llavors hagués estat millor però en el nostre cas no ha funcionat.
+
+  * No cal desanimar-se. Hem vist que podem modificar les dades de mil formes i que podem aplicar altres mètodes i idees fins a obtenir un model que realment sigui fiable i acurat. Com a exemple hem exposat canviar els talls en la popularitat o fer adaptative boosting i poda a l'arbre amb totes les dades.
+
+Per acabar amb els models diferents hem aplicat el random forest i hem vist que:
+
+  * No és un model que ajusta prou bé les dades per al gènere Dance.
+  
+  * Hem descobert que en aquest gènere les lletres explícites triomfen, probablement per l'edat dels que l'escolten; que l'escala de Si dona molta popularitat i que el compàs 3/4 és un gran indicador d'èxit.
+  
+  * Hem tornat a corroborar que la durada afecta a la popularitat.
+
+També hem extret unes conclusions generals:
+
+ * Els models en la vida real no ajusten tan bé com en les dades ja treballades dels exercicis acadèmics. 
+ * El temps que podem dedicar a un projecte de mineria de dades pot ser gairebé il·limitat. Cada vegada que creàvem un model ens sorgien més preguntes o noves maneres de plantejar-nos un problema.
+ 
+Ara, desprès d'haver treballat amb aquestes dades hem de dir que tenen certes limitacions. 
+
+La primera i més important és que tenim molt poques cançons populars. És un fet esperable, però ens esbiaixa les dades. Hagués estat bé haver tallat les cançons per data i veure com evoluciones les cançons populars.
+
+La segona està relacionada amb la primera i és l'esbiaixament de supervivència. Les cançons rock o pop que hi han a la llista tindran més proporció de cançons populars per a tenir cançons populars dins del conjunt sencer de dades. Això produeix un esbiaixament.
+
+La tercera és en referència als gèneres. Com hem pogut veure, la música més formal és més estricta i, per tant, més senzilla de classificar, agrupar i predir. Passa el contrari amb la música pop, que evoluciona al llarg del temps i no ens permet extreure conclusions significatives sobre aquestes cançons.
+
+En general, crec que hagués estat intel·ligent tenir en compte la data en que les cançons van ser populars per a poder fer un estudi més acurat.
+
+Això produeix riscos davant dels models que hem dut a terme. Com que la variabilitat és tan gran, les prediccions són prou dolentes donant com a resultat un model que no prediu més del 70% de les dades.
+
+Segurament si prenem només dos categories: poc popular i molt popular. Podríem tenir models millors. També seria interessant factoritzar les dades numèriques però no en trams iguals si no amb els trams que ens diuen les regles de l'arbre de decisió, per exemple.
+
+Els models que hem triat sempre tendeixen a dir-nos quina cançó serà molt poc popular. I no està malament, recordem que el nostre objectiu era que si no trobàvem els paràmetres per a saber si una cançó seria popular, ens conformaríem amb saber si una cançó està condemnada al fracàs. El que no és correcte és el percentatge de vegades que els models encerten. El que millor ho fa és amb menys del 70% i el que pitjor no arriba ni al 40%.
+
+Per acabar aquesta pràctica, aquests models no han de ser utilitzats, però la feia i les idees que hi han al darrere permeten obrir nous camins en la predicció de la popularitat de les cançons.
+
+## Bibliografia
+
+ 1-. Artificial Intelligence - All in One. (n.d.). Singular Value Decomposition (SVD) - Tutorial. [Video]. YouTube. https://www.youtube.com/watch?v=UyAfmAZU_WI&ab_channel=ArtificialIntelligence-AllinOne
+
+ 2-. (n.d.). Singular Value Decomposition. Max Planck Institute for Informatics. Retrieved from https://resources.mpi-inf.mpg.de/d5/teaching/ss13/dmm/slides/03-svd-handout.pdf
+
+ 3-. (n.d.). Singular Value Decomposition. Massachusetts Institute of Technology. Retrieved from https://web.mit.edu/be.400/www/SVD/Singular_Value_Decomposition.htm
+ 
+ 4-. (n.d.). Singular Value Decomposition. CiteSeerX. Retrieved from https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=e6fc74f9637ee13f352188fd1286f1c0bdad2d80
+ 
+ 5-. Facundo González. (n.d.). Singular Value Decomposition (SVD). [Video]. YouTube. https://www.youtube.com/watch?v=lTGw8PkB3ug&ab_channel=FacundoGonz%C3%A1lez
+ 
+ 6-. (ChatGPT, communicació personal, Maig 2023).
+ 
+ 7-. Minguillón Alfonso, J., & Caihuelas Quiles, R. (2021). Procés de mineria de dades. Primera edició. Barcelona: Fundació Universitat Oberta de Catalunya (FUOC).
+
+ 8-. Gironés Roig, J. (2021). Gestió de característiques. Primera edició. Barcelona: Fundació Universitat Oberta de Catalunya (FUOC).
+
+ 9-. Montoliu Colás, R. (2021). Preprocessament de dades. Primera edició. Barcelona: Fundació Universitat Oberta de Catalunya (FUOC).
+ 
+ 10-. UC Business Analytics R Programming Guide. (n.d.). K-Means Clustering. Retrieved from https://uc-r.github.io/kmeans_clustering#distance
+ 
+ 11-. Marmol Romero, V. (2023) Mineria de dades: PEC2 - Mètodes no supervisats
+ 
+ 12-. Marmol Romero, V. (2023) Mineria de dades: PAC3 - Classificació amb arbres de decisió
+ 
+ 13-. Marmol Romero, V. (2023) Mineria de dades: PRA1 - Selecció i preparació d’un joc de dades
+
